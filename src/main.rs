@@ -15,7 +15,7 @@ async fn main() {
     tokio::task::spawn(chord.play_after(Duration::from_millis(1000)));
 
     // Read the input, and check our result
-    print!("Robot String: ");
+    print!("Robot ?: ");
     let _ = stdout().flush();
 
     let mut input = String::new();

@@ -4,80 +4,102 @@ use std::time::Duration;
 
 use crate::key::{Code, Press};
 
+use windows::Win32::UI::Input::KeyboardAndMouse as WinKb;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, VIRTUAL_KEY, 
-    KEYBD_EVENT_FLAGS, KEYEVENTF_UNICODE, KEYEVENTF_KEYUP,
-    SendInput
+    INPUT, KEYBDINPUT, SendInput
 };
 
-async fn release_key(mut event: KEYBDINPUT, duration: Duration) {
-    tokio::time::sleep(duration).await;
-
-    event.dwFlags |= KEYEVENTF_KEYUP;
-
-    let input_event = INPUT {
-        r#type: INPUT_KEYBOARD,
-        Anonymous: INPUT_0 { ki: event },
-    };
-
-    let events = vec![input_event];
-
-    unsafe { SendInput(&events, std::mem::size_of::<INPUT>() as i32); }
-}
-
-pub async fn send_inputs(keys: &[Press]) {
-    if keys.is_empty() { return; }
-
-    let mut keys_start: Vec<INPUT> = Vec::with_capacity(keys.len());
-    let mut keys_end = Vec::with_capacity(keys.len());
-
-    let mut prev = &keys[1];
-
-    for key in keys.iter() {
-        // Decode the keypress as a virtual and unicode key
-        let (flags, vk, uk) = match key.code {
-            Code::VirtualKey(k) => (KEYBD_EVENT_FLAGS(0), k, k),
-            Code::UnicodeKey(k) => (KEYEVENTF_UNICODE, 0, k)
+/// Convert from a keypress into a Windows keyboard event
+/// 
+/// Wraps the already existing key-press data into the Windows
+/// specific keypress C FFI
+impl From<&Press> for KEYBDINPUT {
+    fn from(press: &Press) -> Self {
+        #[allow(non_snake_case)]
+        let (dwFlags, wVk, wScan) = match press.code {
+            Code::VirtualKey(code) => (
+                WinKb::KEYBD_EVENT_FLAGS(0), 
+                WinKb::VIRTUAL_KEY(code), 
+                code),
+            Code::UnicodeKey(code) => (
+                WinKb::KEYEVENTF_UNICODE, 
+                WinKb::VIRTUAL_KEY(0), 
+                code)
         };
 
-        let keyboard_event = KEYBDINPUT {
-            wVk: VIRTUAL_KEY(vk),
-            wScan: uk,
-            dwFlags: flags,
+        KEYBDINPUT {
+            wVk, wScan, dwFlags,
             time: 0,
             dwExtraInfo: 0
-        };
-
-        let input_event = INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 { ki: keyboard_event },
-        };
-
-        // Add future to list of key-up events to join later
-        keys_end.push(release_key(keyboard_event, key.duration));
-
-        // Inject an additional keydown event
-        if prev.code == key.code {
-            let mut up_event = keyboard_event;
-            up_event.dwFlags |= KEYEVENTF_KEYUP;
-
-            let up_event = INPUT {
-                r#type: INPUT_KEYBOARD,
-                Anonymous: INPUT_0 { ki: up_event },
-            };
-
-            keys_start.push(up_event);
         }
+    }
+}
 
-        // Add to the list of key-down events
-        keys_start.push(input_event);
+/// Converts a press into to an (Down, Up) input tuple.
+/// 
+/// Input events can also support non-keyboard sources, so this
+/// wraps a keypress in the additional struct. It also provides
+/// a struct for both the downstroke and upstroke: The windows `INPUT`
+/// struct wraps a union, which cannot be modified by safe code.
+impl From<&Press> for (INPUT, INPUT) {
+    fn from(press: &Press) -> Self {
+        let mut ki = press.into();
 
-        prev = key;
+        let key_down = INPUT {
+            r#type: WinKb::INPUT_KEYBOARD,
+            Anonymous: WinKb::INPUT_0 { ki }
+        };
+
+        ki.dwFlags |= WinKb::KEYEVENTF_KEYUP;
+
+        let key_up = INPUT {
+            r#type: WinKb::INPUT_KEYBOARD,
+            Anonymous: WinKb::INPUT_0 { ki }
+        };
+
+        (key_down, key_up)
+    }
+}
+
+/// Helper function to send a single input event
+async fn _send_input(input: INPUT, duration: Option<Duration>) {
+    _send_inputs(&[input], duration).await
+}
+
+/// Sends an array of input events, optionally delaying prior to transmission
+async fn _send_inputs(inputs: &[INPUT], duration: Option<Duration>) {
+    if let Some(delay) = duration {
+        tokio::time::sleep(delay).await;
     }
 
-    // Send the initial KEY_DOWN events
-    unsafe { SendInput(&keys_start, std::mem::size_of::<INPUT>() as i32); }
+    unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32); }
+}
+
+/// Consumes a list of `Press` events, and sends them to the system.
+/// 
+/// By default, press events are a 'keydown' immediately followed by a 'keyup'.
+/// However, events with a delayed 'keyup' are also supported, allowing emulation
+/// of a system key being held down.
+pub async fn send_inputs(keys: &[Press]) {
+    let mut inputs = Vec::new();
+    let mut delays = Vec::new();
+    
+    for key in keys {
+        let (down, up): (INPUT, INPUT) = key.into();
+
+        inputs.push(down);
+
+        if key.duration.is_none() {
+            inputs.push(up);
+        } else {
+            // let up = &[up];
+            delays.push(_send_input(up, key.duration));
+        }
+    }
+    
+    // Send the 'instantaneous' input events
+    _send_inputs(&inputs, None).await;
 
     // Wait and send the following KEY_UP events
-    futures::future::join_all(keys_end).await;
+    futures::future::join_all(delays).await;
 }

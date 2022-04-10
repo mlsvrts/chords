@@ -32,7 +32,6 @@
 //! ```
 
 
-
 /// Support sending input events on windows platform, via the `SendInput` API
 #[cfg(target_os = "windows")]
 mod win;
@@ -53,6 +52,9 @@ pub struct Chord {
     pub keys: Vec<key::Press>,
 }
 
+/// Helper implementation to generate a `Chord` from vectors of unicode characters.
+/// 
+/// This supports the syntax `Chord::from("Hello!".encode_utf16()).
 impl<I: Into<u16>, T: IntoIterator<Item = I>> From<T> for Chord {
     fn from(codes: T) -> Self {
         Self {
@@ -73,9 +75,9 @@ impl Chord {
         self.play().await
     }
 
-    #[cfg(target_os = "windows")]
     /// Playback the key events to the system
     pub async fn play(&self) {
+        #[cfg(target_os = "windows")]
         win::send_inputs(&self.keys).await
     }
 }
