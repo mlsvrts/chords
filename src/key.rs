@@ -77,4 +77,12 @@ mod tests {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+    fn keypress_from_vk() {
+        let expected = Press::new(Code::VirtualKey(0x0D), None);
+        let actual = Press::from(VirtualKey::Enter);
+
+        assert_eq!(actual, expected);
+    }
 }
