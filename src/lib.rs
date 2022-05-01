@@ -31,21 +31,29 @@
 //! }
 //! ```
 
+#![warn(clippy::all)]
 
 /// Support sending input events on windows platform, via the `SendInput` API
 #[cfg(target_os = "windows")]
-mod win;
+mod windows;
+
+/// Support windows keyboard scan codes
+#[cfg(target_os = "windows")]
+pub use windows::VirtualKey;
+
+/// Support sending keyboard events on linux via `uinput`
+/// 
+/// They `uinput` subsystem supports creating virtual input devices, and sending
+/// these input events from userspace. Systems that do not have `/dev/uinput` are
+/// not currently supported.
+#[cfg(target_os = "linux")]
+mod linux;
 
 /// Provides a `Press` type, that respresents pressing a key for some duration.
 ///
 /// `Press` events are used to a sequence of key-down + key-up events when playing
 /// a `Chord` of keypresses.
 pub mod key;
-
-/// Provides the list of virtual key codes on windows/unix machines
-pub mod codes;
-pub use codes::VirtualKey; 
-
 
 /// A `Chord` is a group of key-presses that will be transmitted in-bulk to the system
 pub struct Chord {

@@ -9,6 +9,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, KEYBDINPUT, SendInput
 };
 
+/// Windows virtual key (scan) codes
+pub use codes::VirtualKey;
+
 /// Convert from a keypress into a Windows keyboard event
 /// 
 /// Wraps the already existing key-press data into the Windows
