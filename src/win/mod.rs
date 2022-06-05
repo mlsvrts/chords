@@ -10,6 +10,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 
 /// Windows virtual key (scan) codes
+pub mod codes;
 pub use codes::VirtualKey;
 
 /// Convert from a keypress into a Windows keyboard event

@@ -35,11 +35,11 @@
 
 /// Support sending input events on windows platform, via the `SendInput` API
 #[cfg(target_os = "windows")]
-mod windows;
+mod win;
 
 /// Support windows keyboard scan codes
 #[cfg(target_os = "windows")]
-pub use windows::VirtualKey;
+pub use win::VirtualKey;
 
 /// Support sending keyboard events on linux via `uinput`
 /// 
@@ -47,7 +47,7 @@ pub use windows::VirtualKey;
 /// these input events from userspace. Systems that do not have `/dev/uinput` are
 /// not currently supported.
 #[cfg(target_os = "linux")]
-mod linux;
+mod nix;
 
 /// Provides a `Press` type, that respresents pressing a key for some duration.
 ///
